@@ -20,7 +20,7 @@ public class AuthServerBuilder {
     public HttpServer build() {
         try {
             HttpServer server = HttpServer.create();
-            InetSocketAddress address = new InetSocketAddress(0);
+            InetSocketAddress address = new InetSocketAddress(8080);
             server.bind(address, 0);
             AuthInfo.authPort = server.getAddress().getPort();
             configureServerEndpoint(server);

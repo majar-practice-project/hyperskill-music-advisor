@@ -2,6 +2,7 @@ package advisor.view;
 
 import advisor.Configuration;
 import advisor.auth.AuthInfo;
+import advisor.data.PageInfo;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -16,15 +17,16 @@ public class CommandView {
         return scanner.nextLine();
     }
 
-    public void showNewReleases(List<JsonElement> releases){
+    public void showNewReleases(PageInfo info){
         System.out.println("---NEW RELEASES---");
-        releases.forEach(el -> {
+        info.getEls().forEach(el -> {
             JsonObject obj = el.getAsJsonObject();
             System.out.println(obj.get("name").getAsString());
             displayArtists(obj.get("artists").getAsJsonArray().asList());
             System.out.println(obj.getAsJsonObject("external_urls").get("spotify").getAsString());
             System.out.println();
         });
+        showPageNumber(info.getCurrentPage(), info.getTotalPages());
     }
 
     public void displayArtists(List<JsonElement> els){
@@ -35,37 +37,37 @@ public class CommandView {
         System.out.println("]");
     }
 
-    public void showFeatured(List<JsonElement> featuredList){
+    public void showFeatured(PageInfo info){
         System.out.println("---FEATURED---");
-        featuredList.forEach(el -> {
+        info.getEls().forEach(el -> {
             JsonObject obj = el.getAsJsonObject();
             System.out.println(obj.get("name").getAsString());
             System.out.println(obj.getAsJsonObject("external_urls").get("spotify").getAsString());
             System.out.println();
         });
+        showPageNumber(info.getCurrentPage(), info.getTotalPages());
     }
 
-    public void showCategories(List<JsonElement> categories){
+    public void showCategories(PageInfo info){
         System.out.println("---CATEGORIES---");
-        categories.forEach(el -> System.out.println(el.getAsJsonObject().get("name").getAsString()));
+        info.getEls().forEach(el -> System.out.println(el.getAsJsonObject().get("name").getAsString()));
+        showPageNumber(info.getCurrentPage(), info.getTotalPages());
     }
 
-    public void showPlayList(String category, List<JsonElement> playlist){
+    public void showPlayList(String category, PageInfo info){
         System.out.printf("---%s PLAYLISTS---%n", category);
-        if(!playlist.isEmpty()) {
-            JsonObject obj = playlist.get(0).getAsJsonObject();
-            if(obj.has("message")) {
-                System.out.println(obj.get("message").getAsString());
-                return;
-            }
-        }
 
-        playlist.forEach(el -> {
+        info.getEls().forEach(el -> {
             JsonObject obj = el.getAsJsonObject();
             System.out.println(obj.get("name").getAsString());
             System.out.println(obj.getAsJsonObject("external_urls").get("spotify").getAsString());
             System.out.println();
         });
+        showPageNumber(info.getCurrentPage(), info.getTotalPages());
+    }
+
+    public void showError(Exception e){
+        System.out.println(e.getMessage());
     }
 
     public void showExit(){
@@ -96,5 +98,13 @@ public class CommandView {
     public void showCodeReceived() {
         System.out.println("code received");
         System.out.println("Making http request for access_token...");
+    }
+
+    public void showNoMorePages() {
+        System.out.println("No more pages.");
+    }
+
+    public void showPageNumber(int currentPage, int totalPage){
+        System.out.printf("---PAGE %d OF %d---%n", currentPage, totalPage);
     }
 }

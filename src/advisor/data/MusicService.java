@@ -1,9 +1,7 @@
 package advisor.data;
 
 import advisor.Configuration;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import advisor.data.api.*;
 
 import java.io.IOException;
 import java.net.URI;
@@ -11,7 +9,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class MusicService {
@@ -20,65 +17,60 @@ public class MusicService {
     private final HttpClient client;
     private final String ACCESS_TOKEN;
 
+    private BaseAPIService subService;
+
     public MusicService(HttpClient client, String ACCESS_TOKEN) {
         this.client = client;
         this.ACCESS_TOKEN = ACCESS_TOKEN;
-    }
-
-    public List<JsonElement> getNewRelease() {
-        HttpRequest request = buildGetRequest("/v1/browse/new-releases");
-        String json = sendGetRequest(request).body();
-        JsonObject jo = JsonParser.parseString(json).getAsJsonObject();
-        return jo.getAsJsonObject("albums").getAsJsonArray("items").asList();
-    }
-
-    public List<JsonElement> getCategories() {
-        HttpRequest request = buildGetRequest("/v1/browse/categories");
-        String json = sendGetRequest(request).body();
-        JsonObject jo = JsonParser.parseString(json).getAsJsonObject();
-
-        List<JsonElement> els = jo.getAsJsonObject("categories").getAsJsonArray("items").asList();
-        if(categoriesId.isEmpty()){
-            els.forEach(el -> categoriesId.put(el.getAsJsonObject().get("name").getAsString().toUpperCase(), el.getAsJsonObject().get("id").getAsString()));
-        }
-
-        return els;
-    }
-
-    public List<JsonElement> getFeatures() {
-        HttpRequest request = buildGetRequest("/v1/browse/featured-playlists");
-        String json = sendGetRequest(request).body();
-        JsonObject jo = JsonParser.parseString(json).getAsJsonObject();
-
-        return jo.getAsJsonObject("playlists").getAsJsonArray("items").asList();
-    }
-
-    public List<JsonElement> getPlaylist(String category) {
-        if(categoriesId.isEmpty()) getCategories();
-        HttpRequest request = buildGetRequest(String.format("/v1/browse/categories/%s/playlists", categoriesId.get(category)));
-
-        HttpResponse<String> response = sendGetRequest(request);
-//        if(response.statusCode() == 404) return null;
-
-        String json = sendGetRequest(request).body();
-        JsonObject jo = JsonParser.parseString(json).getAsJsonObject();
-        if(jo.has("error")) return List.of(jo.get("error"));
-
-        return jo.getAsJsonObject("playlists").getAsJsonArray("items").asList();
-    }
-
-    private HttpResponse<String> sendGetRequest(HttpRequest request) {
         try {
-            return client.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (IOException | InterruptedException e) {
-            throw new RuntimeException(e);
+            setupCategoriesId();
+        } catch (APIErrorException e) {
+            throw new RuntimeException("Error fetching categories with API server");
         }
     }
 
-    private HttpRequest buildGetRequest(String resourcePath) {
-        return HttpRequest.newBuilder().header("Authorization", "Bearer " + ACCESS_TOKEN)
-                .uri(URI.create(String.format("%s%s", RESOURCE_ROOT, resourcePath)))
-                .GET()
-                .build();
+    private void setupCategoriesId() throws APIErrorException {
+        BaseAPIService categoryService = new CategoriesService(client, ACCESS_TOKEN);
+        PageInfo currentPage = categoryService.getNew();
+        currentPage.getEls().forEach(el -> categoriesId.put(el.getAsJsonObject().get("name").getAsString().toUpperCase(), el.getAsJsonObject().get("id").getAsString()));
+        try{
+            while(true) {
+                currentPage = categoryService.getNext();
+                currentPage.getEls().forEach(el -> categoriesId.put(el.getAsJsonObject().get("name").getAsString().toUpperCase(), el.getAsJsonObject().get("id").getAsString()));
+            }
+        } catch (NoMorePageException ignored) {
+            // reach the end. We have read the whole category list
+        }
+    }
+
+    public PageInfo getNewRelease() throws APIErrorException {
+        subService = new NewReleaseService(client, ACCESS_TOKEN);
+        return subService.getNew();
+    }
+
+    public PageInfo getPrev() throws NoMorePageException, APIErrorException {
+        if(subService == null) throw new NoMorePageException();
+        return subService.getPrev();
+    }
+
+    public PageInfo getNext() throws NoMorePageException, APIErrorException {
+        if(subService == null) throw new NoMorePageException();
+        return subService.getNext();
+    }
+
+    public PageInfo getCategories() throws APIErrorException {
+        subService = new CategoriesService(client, ACCESS_TOKEN);
+        return subService.getNew();
+    }
+
+    public PageInfo getFeatures() throws APIErrorException {
+        subService = new FeaturedService(client, ACCESS_TOKEN);
+        return subService.getNew();
+    }
+
+    public PageInfo getPlaylist(String category) throws APIErrorException, InvalidCategoryException {
+        if(!categoriesId.containsKey(category)) throw new InvalidCategoryException();
+        subService = new PlaylistService(client, ACCESS_TOKEN, categoriesId.get(category));
+        return subService.getNew();
     }
 }
